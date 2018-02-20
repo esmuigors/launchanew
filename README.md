@@ -2,6 +2,7 @@
 Set of tools for managing Gaussian calculations
 
 USAGE REQUIREMENTS:
+
 0. (presumably) ALL scripts in the branch are required at some point
 1. bash; perl; sed; awk; if You want to use problem solver, then also python. This was tested on cluster with quite ancient versions of them (bash from 3.00.15 to 4.1.2; perl from 5.8.5 to 5.10.1; sed from 4.1.2 to 4.2.1; awk from 3.1.3 to 3.1.7), so hopefully Yours will not be too old...
 2. input files MUST have title section constructed in the following MANNER (not absolutely with these meanings, see line 11):
