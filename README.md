@@ -5,10 +5,10 @@ USAGE REQUIREMENTS:
 1. bash; perl; sed; awk; if You want to use problem solver, then also python. This was tested on cluster with quite ancient versions of them (bash from 3.00.15 to 4.1.2; perl from 5.8.5 to 5.10.1; sed from 4.1.2 to 4.2.1; awk from 3.1.3 to 3.1.7), so hopefully Yours will not be too old...
 2. input files MUST have title section constructed in the following MANNER (not absolutely with these meanings, see line 11):
 	::: input_geometry_filename* output_geometry_filename* job_group_name** job_processing_sub_name multistep_job_name** job_step_in_multistep_job***
-* should match if not optimization
+\* should match if not optimization
 ** we use automated extraction of job results and storing in database in the form of spreadsheet files; hence, job_group_name is the name of a sheet inside such a file (one file for each compound); multistep_job_name is the name of compound job -- it is useful to group Your jobs in the batch file; for instance, Ionization job (that is, by ΔSCF method) consists of three steps (neutral molecule, cation, anion), with multistep_job_name=Ionization and job_step_in_multistep_job=(1; 2; 3); ExcitedStateAbsorption will have the 1st step – single point with storing the 'slow' component of the reaction field and the 2nd step – the TD calculation itself.
 
-For launchanew to work properly, You only need to set multistep_job_name and job_step_in_multistep_job for each job title section -- why this is needed can be seen in description for options -c and -d. For example, You can use such title section:
+[b]For launchanew to work properly, You only need to set multistep_job_name and job_step_in_multistep_job for each job title section[/b] -- why this is needed can be seen in description for options -c and -d. For example, You can use such title section:
 	::: a b c d e 1
 Notice, however, that the first step of a geometry optimization is recognized by matching 'GeometryOptimization 1', but You can modify the script to match Your names. We actually advice You to use such a naming system -- it is really convenient to use for large batches of computations.
 Sometimes there is need for jobs that are not going to be archived (not like it is defined by Gaussian, as any job with IOps is NOT archived by default). For example, fragmented or other sophisticated guesses, or jobs froducing natural orbitals, etc. We are used to mark such jobs by setting their geometries to 0000_000 0000_000 (see description of -z keyword).
