@@ -85,8 +85,6 @@ echo $(tac $1 | sed -n '1,/Entering Link 1/p' | tac | sed -n '1,/GINC/{/GINC/!{/
 
 erasedefectous() {
 touch bufa_launch
-echo "DEBUG: enter erasedefectous($1)"
-#echo "Remain $(less $icurinfile | grep -c "$prechk") such CHK"
 echo -e "Searching for defectous line:\n$1\n..."
 until [[ -z $(less $icurinfile | grep -c -e "$1") ]]; do
         #echo "Remain $(less $icurinfile | grep -c "$prechk") instances of this defectous phrase"
@@ -136,7 +134,6 @@ export icurinfile=$icurinfile; export icuroutfile=$icuroutfile
 generategjf() {
     icurinfile=$1; icuroutfile=$2
     [ -n "$(grep -e 'MP2' -e 'EPT' -e 'CCSD' -e 'B2PLYP' -e 'Tran' $icurinfile)" ] && postSCF=true || postSCF=false
-    echo "DEBUG: enter generategjf($1 $2)"
     nrdone=$(grep -c "Normal termination" $2)
     totlines=$(grep -ce "#" $1)
     if [ $totlines -gt $nrdone ] && [ ! $totlines -lt 2 ]; then # error was here: totlines is nr of jobs in file, not nr of lines in it...
@@ -447,7 +444,6 @@ generategjf() {
 
 checkout() {
 	date
-	echo "DEBUG: enter checkout($1 $2)"
 	if [ ! -f $2 ]; then # if .out file does not exist, print initial info
 		# sed -i -e '$a\ ' $1 # eliminates the notorious case of lacking EOF, which causes g09 to exit...
 		echo "Starting Gaussian for the first job in the list..."

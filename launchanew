@@ -165,12 +165,6 @@ dos2unix $curinfile
 
 tutelka=5
 
-#############################3 debugging
-#	until [ $tutelka -eq 0 ]; do
-#	    checkout $curinfile $curoutfile && tutelka=0 || exit 1
-#	done
-################################3 end of debugging
-
 perl -0644 -i -pe 's/\n(.*[\S]+)\n(--Link1--)/\n$1\n\n$2/g' $curinfile # adding newlines before --Link1-- if they are missing
 perl -0644 -i -pe 's/(--Link1--)\n\n--Link1--/$1/g' $curinfile # removing spurious --Link1--
 >> $curinfile # adding last newline 'just in case'
@@ -180,7 +174,6 @@ nrlutil=0; lnlutil=100500
 firstcuroutfile=${firstcurinfile%.gjf}.out
 until [ $lnlutil -lt 1 ] || [ $(wc -c < $curinfile) -lt 2 ]; do
 	((nrlutil++))
-	echo "DEBUG: enter lnlutil cycle (nrlutil=$nrlutil)"
 	[ ! -f ${firstcurinfile%.gjf}_U$nrlutil.gjf ] && cp $curinfile ${firstcurinfile%.gjf}_U$nrlutil.gjf
 	curinfile=${firstcurinfile%.gjf}_U$nrlutil.gjf
 	curoutfile=${firstcurinfile%.gjf}_U$nrlutil.out
@@ -192,9 +185,7 @@ until [ $lnlutil -lt 1 ] || [ $(wc -c < $curinfile) -lt 2 ]; do
 	sed -i $((elnlutil+1))',$d' $curinfile
 	elnlutil=$felnlutil
 	sed -i 's/'${firstcuroutfile//\//\\\/}'/'$curoutfile'/' $curinfile # replaces all slashes (if present) in filename with backslashes
-	echo "DEBUG: next utility line is $lnlutil."
 	[ -z $lnlutil ] || lutilcomm=$(sed -n $elnlutil'p' $curinfile |sed 's/!lutil //')
-	echo "DEBUG: next utility command is: $lutilcomm, found by line: sed -n $elnlutil'p' $curinfile | sed 's/!lutil //'."
 	echo "Present input file is $curinfile"
 	if [ $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf) -gt 1 ]; then
 	    until [ -n "$(head -n 1 ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf | grep -e '%' -e '!lutil')" ] || [ $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf) -eq 0 ]; do
@@ -203,36 +194,26 @@ until [ $lnlutil -lt 1 ] || [ $(wc -c < $curinfile) -lt 2 ]; do
 	else
 	    : > ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf
 	fi
-	echo "DEBUG: 1"
 	chmod a+r $curinfile # otherwise won't be read by g09
 	[ -f $curoutfile ] && rm $curoutfile # checkout vajag, lai nebutu, un lietotajs tika bridinats
 	echo "" >> $curinfile
-	echo "DEBUG: 2"
 	until [ $tutelka -eq 0 ]; do # launches Gaussian; then replaces Gen/GenECP in .OUT file with the designation provided in the input file
 	    outmorkovka=$curoutfile; inmorkovka=$curinfile
-		echo "DEBUG: before checkout and test"
 		echo "curinfile is $curinfile; curoutfile is $curoutfile"
 	    checkout $curinfile $curoutfile && tutelka=0 || { sed -i '/^:::/s/_/\//g' $curinfile; g09 < $curinfile > $curoutfile; sed -i '/^:::/s/\//_/g' $curinfile; sed -i '/^ :::/,/-----/s/\//_/g' $curoutfile; }
 	    lnmorkovka=1
 	    until [ $(grep -c -E '^ #[TNPtnp]* .*[/]Gen' $outmorkovka) -eq 0 ]; do
 		morkovka=$(sed -n $lnmorkovka',$p' $inmorkovka | grep '==GENBASISSET==' -m 1 | sed 's/\!==GENBASISSET==//;s/ //g')
 		lnmorkovka=$(sed -n $lnmorkovka',$p' $inmorkovka | grep '==GENBASISSET==' -n -m 1 | cut -d ':' -f 1);lnmorkovka=$((lnmorkovka+1))
-		echo "DEBUG: enter lnmorkovka cycle (lnmorkovka=$lnmorkovka; morkovka=$morkovka)"
 		sed -i '/Gen[ECP]*/{/^ #/{s/Gen[ECP]*/('${morkovka//;/\\\;}')/;:a;n;ba}}' $outmorkovka
 		[ -z "$morkovka" ] && sed -i '/()ECP/{/^ #/{s/()ECP/GenECP/;:a;n;ba}}' $outmorkovka || sed -i '/()ECP/{/^ #/{s/()ECP/('${morkovka//;/\\\;}')/;:a;n;ba}}' $outmorkovka # fallback option
 	    done
-	    echo "DEBUG: outmorkovka properties:     $(ls -l $outmorkovka)"
-	    echo "DEBUG: up to start next cycle (tutelka=$tutelka)"
 	done
 	for zhambayak in ${firstcurinfile%.gjf}*out; do
-		echo "DEBUG: line since which lfna works is $(( $(wc -l < $zhambayak)-$(tac $zhambayak | grep -n -m 1 '^ #' | cut -d ':' -f 1) ))"
 		[ $(lfna $zhambayak '^ :::' $(( $(wc -l < $zhambayak)-$(tac $zhambayak | grep -n -m 1 '^ Entering Link 1' | cut -d ':' -f 1) )) | grep -c 'GeomOpt') -eq 0 ] && ( $rmdurakov ) && doloiduraka $zhambayak # if there are no 'Normal terminations' or a functional lacked abilities for a compound job, the output will be deleted; not smth You want until the file is checked by checkout(), though...
-		echo "DEBUG: currently cleansed .out file properties:     $(ls -l $zhambayak)"
 	done
-	echo "DEBUG: outmorkovka properties:     $(ls -l $outmorkovka)"
 
 	if [ -n "$(echo $lutilcomm | grep getepsilon)" ]; then
-	    echo "DEBUG: enter getepsilon cycle ($lutilcomm)"
 	    eval $lutilcomm
 	    gepsinfile=$(cat zebra.getepsilon); gepsoutfile=${gepsinfile%.gjf}.out; erreps=false
 	    until ([ "$gepsinfile" == "exterminate" ] || $erreps); do
@@ -246,19 +227,15 @@ until [ $lnlutil -lt 1 ] || [ $(wc -c < $curinfile) -lt 2 ]; do
 	elif [ -n "$lutilcomm" ]; then
 	    while [ -n "$lutilcomm" ]; do
 		eval $lutilcomm
-		echo "DEBUG: elnlutil was $elnlutil"
 		((elnlutil++)); lutilcomm=$(sed -n $elnlutil's/!lutil //' $curinfile)
-		echo "DEBUG: elnlutil is $elnlutil"
 	    done
 	fi
 	echo $(date); tutelka=5
-	echo "DEBUG: next filename, checked by wc, is ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf, with result $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf)."
 	[ $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf) -lt 3 ] && break
 done
 [ $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf) -eq 0 ] && rm ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf
 [ -f zebra.getepsilon ] && rm zebra.getepsilon
 [ -f bufa_launch ] && rm bufa_launch
-echo "DEBUG: exited cycles, about to launch cannotzero (rmzero=$rmzero)"
 if $rmzero; then
    cannotzero 
 fi
