@@ -1,0 +1,13 @@
+#!/bin/bash
+[ -z "$2" ] && koef=870 || koef=$2 # 875 crashed
+[ $koef -gt 100 ] && dkoef=1000 || dkoef=100
+sed -i 's/nprocshared/NProcShared/;s/%mem/%Mem/' $1
+allproc=$(grep -c 'processor' /proc/cpuinfo)
+allmem=$(free -m | grep 'Mem:' | xargs | cut -d ' ' -f 2)    # in MB!
+allmem=$((allmem*koef/dkoef))
+ismem=$(grep -m 1 '%Mem' $1 | cut -d '=' -f 2)
+isproc=$(grep -m 1 '%NProcShared' $1 | cut -d '=' -f 2)
+echo -e "Old Mem was $ismem, new is $allmem MB.\nOld NProcShared was $isproc, new is $allproc."
+sed -i '/%NProcShared/s|'"$isproc"'|'"$allproc"'|' $1
+sed -i '/%Mem/s|'"$ismem"'|'"$allmem"'MB|' $1
+

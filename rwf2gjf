@@ -1,0 +1,25 @@
+#!/bin/bash
+[ -z "$2" ] && koef=10 || koef=$2
+[ $koef -gt 10 ] && dkoef=100 || dkoef=10
+# assuming there is also third (emergency) place for RWF, in /home
+allwork=$(df -h | grep work | tr -s ' ' | cut -d ' ' -f 4 | tr -d 'G')
+allpublic=$(df -h | grep public | tr -s ' ' | cut -d ' ' -f 4 | tr -d 'G')
+workrwf=$((allwork*koef/dkoef-4)); pubrwf=$((allpublic*koef/dkoef-4))
+workint=1; pubint=1 # workint=$((allwork/11)); pubint=$((allpublic/11))
+isworkrwf=$(grep -m 1 'RWF' $1 | cut -d ',' -f 2)
+isworkint=$(grep -m 1 'Int' $1 | cut -d ',' -f 2)
+isworkd2e=$(grep -m 1 'D2E' $1 | cut -d ',' -f 2)
+ispubrwf=$(grep -m 1 'RWF' $1 | cut -d ',' -f 4)
+ispubint=$(grep -m 1 'Int' $1 | cut -d ',' -f 4)
+ispubd2e=$(grep -m 1 'D2E' $1 | cut -d ',' -f 4)
+ishomrwf=$(grep -m 1 'RWF' $1 | cut -d ',' -f 6)
+ishomint=$(grep -m 1 'Int' $1 | cut -d ',' -f 6)
+ishomd2e=$(grep -m 1 'D2E' $1 | cut -d ',' -f 6)
+ismaxdisk="$(grep -m 1 -o -E 'MaxDisk=[^ ]*' $1)"
+maxdisk=$((${ishomrwf%GB}+${ishomint%GB}+${ishomd2e%GB}+$workrwf+2*$workint+$pubrwf+2*$pubint))
+echo "Old MaxDisk was $ismaxdisk, new is $maxdisk GB."
+sed -i '/%RWF/s|'"$isworkrwf"','"$GAUSS_SPRSCRDIR"'|'"$workrwf"'GB,'"$GAUSS_SPRSCRDIR"'|;s|'"$ispubrwf"',/hom|'"$pubrwf"'GB,/hom|' $1
+sed -i '/%Int/s|'"$isworkint"','"$GAUSS_SPRSCRDIR"'|'"$workint"'GB,'"$GAUSS_SPRSCRDIR"'|;s|'"$ispubint"',/hom|'"$pubint"'GB,/hom|' $1
+sed -i '/%D2E/s|'"$isworkd2e"','"$GAUSS_SPRSCRDIR"'|'"$workint"'GB,'"$GAUSS_SPRSCRDIR"'|;s|'"$ispubd2e"',/hom|'"$pubint"'GB,/hom|' $1
+sed -i '/MaxDisk=/s/'"$ismaxdisk"'/MaxDisk='"$maxdisk"'GB/' $1
+

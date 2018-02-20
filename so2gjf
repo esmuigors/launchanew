@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# $1: .OUT filename
+
+[[ ! -z "$(echo $1 | grep '\-h')" ]] && echo "Usage: ./so2gjf YOUR_SO_FILE" && exit 1
+[ -z "$2" ] && wywadz=${1%.out}.gem || wywadz=$2
+
+awk '$1,$0 = "AT"$2"  "$4"  "$5"  "$6' < $1 > $wywadz
+sed 's/AT14/Si/' -i $wywadz
+sed 's/AT15/P/' -i $wywadz
+sed 's/AT16/S/' -i $wywadz
+sed 's/AT17/Cl/' -i $wywadz
+sed 's/AT35/Br/' -i $wywadz
+sed 's/AT53/I/' -i $wywadz
+sed 's/AT34/Se/' -i $wywadz
+sed 's/AT33/As/' -i $wywadz
+sed 's/AT32/Ge/' -i $wywadz
+sed 's/AT31/Ga/' -i $wywadz
+sed 's/AT49/In/' -i $wywadz
+sed 's/AT50/Sn/' -i $wywadz
+sed 's/AT51/Sb/' -i $wywadz
+sed 's/AT26/Fe/' -i $wywadz
+sed 's/AT77/Ir/' -i $wywadz
+sed 's/AT78/Pt/' -i $wywadz
+sed 's/AT44/Ru/' -i $wywadz
+sed 's/AT45/Rh/' -i $wywadz
+sed 's/AT46/Pd/' -i $wywadz
+sed 's/AT76/Os/' -i $wywadz
+sed 's/AT29/Cu/' -i $wywadz
+sed 's/AT30/Zn/' -i $wywadz
+sed 's/AT22/Ti/' -i $wywadz
+sed 's/AT6/C/' -i $wywadz # all single-figure numbers must be at the end! otherwise H6, H7 and so on will appear instead of S, Cl, etc.
+sed 's/AT1/H/' -i $wywadz
+sed 's/AT7/N/' -i $wywadz
+sed 's/AT8/O/' -i $wywadz
+sed 's/AT5/B/' -i $wywadz
+sed 's/AT9/F/' -i $wywadz
+sed 's/AT3/Li/' -i $wywadz
+dos2unix $wywadz
+

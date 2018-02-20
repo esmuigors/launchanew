@@ -1,0 +1,3 @@
+#!/bin/bash
+svetgorit=$(makesectsel $1); [ $(echo "$svetgorit" | grep -c -e 'TPSSh' -e 'LC-wPBE') -eq $(echo "$svetgorit" | grep -c -e 'ExcitedStateAbsor' -e 'ExcitedStateEmis' -e 'Polarizabil') ] && [ $(echo "$svetgorit" | grep -c -e 'TPSSh' -e 'LC-wPBE') -ne 0 ] && rm $1 || ( [ $(cat $1 | grep -c -e 'Normal termination') -eq 0 ] && rm $1 ) # rm $1
+

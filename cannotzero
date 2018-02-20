@@ -1,0 +1,11 @@
+#!/bin/bash
+if [ -n "$(grep '::: 0000_000' $1)" ] && [ "${1%out}" != "$1" ]; then
+    filesiz=$(wc -c $1 | xargs | cut -d ' ' -f 1)
+    while [ $filesiz -gt 10 ]; do
+	[ -z "$(sed -n '1,/termination/p' $1 | grep '000_000')" ] && sed -n '1,/termination/p' $1 >> $1.nozero
+	sed -i '1,/termination/d' $1
+	export filesiz=$(wc -c $1 | xargs | cut -d ' ' -f 1)
+	done
+    mv $1.nozero $1
+fi
+
