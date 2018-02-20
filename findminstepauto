@@ -1,0 +1,349 @@
+#!/bin/bash
+# based on version 2.0, 06.07.2016.
+# yes, lots of Indian code, because bash is awfully inconvenient to work with floats and array variables (not passable as arguments!)
+
+printsteps=false; printacs=false; helps=false
+
+lfna(){
+# inp2=$(echo $2 | sed 's/\:/\\\:/g')
+fstep=""; linenr=$(sed -n "$3"',/Normal termination/p' $1 | grep -m 1 -n -e "$2" | cut -d : -f 1)
+[[ $3 -gt 0 ]] && linenr=$(($linenr+$3-1))
+beidzis=$(sed "$linenr q;d" $1 | sed 's/^.//')
+#echo "Rinda Nr $linenr"; echo "Beidzis ir $beidzis."
+until [[ ! -z "$(echo $beidzis | grep -e "------")" ]]; do
+    fstep="$fstep$beidzis"
+    ((linenr++))
+    beidzis=$(sed "$linenr q;d" $1 | sed 's/^.//') #; echo "Tagad beidzis ir $beidzis."
+done
+echo $fstep
+return 0; 	
+}
+
+myjob=0
+totjobs=$(grep -c "Entering Link 1" $1)
+[[ ! $totjobs -eq 1 ]] && myjob=$((totjobs-$2)) || myjob=$totjobs
+[ -f "padalproshlogodniysneg.foo" ] && rm padalproshlogodniysneg.foo
+cp $1 padalproshlogodniysneg.foo
+if [ ! $myjob -eq 1 ]; then
+    line=($(grep -n -m $((myjob-1)) "Normal termination" padalproshlogodniysneg.foo | cut -d : -f 1))
+    sed -i "1,${line[$myjob-2]} d" padalproshlogodniysneg.foo
+fi
+if [ ! $myjob -eq $totjobs ]; then
+    line=($(grep -n -E "Normal termination|Error termination" padalproshlogodniysneg.foo | cut -d : -f 1))
+    sed -i "$((${line[0]}+1)),$ d" padalproshlogodniysneg.foo
+fi
+nstep=$(grep -c 'Step number' padalproshlogodniysneg.foo)
+[ $nstep -eq 0 ] && { echo 0; exit 0; }
+convergence=(0.00045 0.0003 0.0018 0.0012 0.00375)
+murkskis=$(grep -c 'a.u. after' padalproshlogodniysneg.foo)
+{ [[ $murkskis -eq 0 ]] || [[ $murkskis -eq $(grep -c 'A.U. after' padalproshlogodniysneg.foo) ]]; } && energias=( $(grep -B 1 'NFock=' padalproshlogodniysneg.foo | grep 'SCF Done' | tr -s ' ' | cut -d ' ' -f 6) ) || \
+{ energias=( $(sed -n '/SCF Don/ {:bulka s/\n/<br>/g; N; /\n SCF Don/{D};/GradGradGrad/!b bulka;s/<br>.*//g;p}' padalproshlogodniysneg.foo | tr -s ' ' | cut -d ' ' -f 6) ); }
+maxforce=( $(grep 'Maximum Force' padalproshlogodniysneg.foo | sed 's/\*/X/g' | tr -s ' ' | cut -d ' ' -f 4) )
+rmsforce=( $(grep 'RMS     Force' padalproshlogodniysneg.foo | sed 's/\*/X/g' | tr -s ' ' | cut -d ' ' -f 4) )
+maxdispl=( $(grep 'Maximum Displace' padalproshlogodniysneg.foo | sed 's/\*/X/g' | tr -s ' ' | cut -d ' ' -f 4) )
+rmsdispl=( $(grep 'RMS     Displace' padalproshlogodniysneg.foo | sed 's/\*/X/g' | tr -s ' ' | cut -d ' ' -f 4) )
+#altogether=(9001)
+for muffin in $(seq 0 $((nstep-1))); do amethyst='python -c "print(round('${maxforce[$muffin]}'/'${convergence[0]}'+'${rmsforce[$muffin]}'/'${convergence[1]}'+'${maxdispl[$muffin]}'/'${convergence[2]}'+'${rmsdispl[$muffin]}'/'${convergence[3]}',5))"'; [ -z "$(grep 'round(/' <<< ${pycomanda[0]})" ] && [ -z "$(grep '/)' <<< ${pycomanda[0]})" ] && altogether=( ${altogether[@]} $(eval $amethyst) ) || altogether=( ${altogether[@]} 100 ); done
+#echo "Energias[0] is ${energias[0]}; energias[53] is ${energias[53]}."; exit 1
+for muffin in $(seq 0 $((nstep-1))); do amethyst='python -c "print(round(2000*('${energias[0]}'-'${energias[$muffin]}')+'${altogether[$muffin]}',5))"'; altogether2=( ${altogether2[@]} $(eval $amethyst) ); done
+#echo "Altogether is ${altogether[@]}"
+#echo "Nstep is $nstep"; echo "Energies are ${energias[@]}"; exit 1
+
+
+IFS=$'\n' minenergia=($(sort -n <<<"${energias[*]}")); unset IFS; minenergia=${minenergia[0]}
+IFS=$'\n' minmaxforce=($(sort -n <<<"${maxforce[*]}")); unset IFS; minmaxforce=${minmaxforce[0]}
+IFS=$'\n' minrmsforce=($(sort -n <<<"${rmsforce[*]}")); unset IFS; minrmsforce=${minrmsforce[0]}
+IFS=$'\n' minmaxdispl=($(sort -n <<<"${maxdispl[*]}")); unset IFS; minmaxdispl=${minmaxdispl[0]}
+IFS=$'\n' minrmsdispl=($(sort -n <<<"${rmsdispl[*]}")); unset IFS; minrmsdispl=${minrmsdispl[0]}
+IFS=$'\n' minaltogether=($(sort -n <<<"${altogether[*]}")); unset IFS; minaltogether=${minaltogether[0]}
+IFS=$'\n' minaltogether2=($(sort -n <<<"${altogether2[*]}")); unset IFS; minaltogether2=${minaltogether2[0]}
+
+minenergia1=($(printf '%s\n' "${energias[@]}" | grep -n ${minenergia//-/} | cut -d ':' -f 1))
+selectedsteps=(${minenergia1[@]}); minenergia1=$(echo "${minenergia1[@]}" | xargs)
+#echo ${minenergia1[@]}; echo ${selectedsteps[@]}; exit 1
+minmaxforce1=$(printf '%s\n' "${maxforce[@]}" | grep -n ${minmaxforce//-/} | cut -d ':' -f 1)
+selectedsteps=(${selectedsteps[@]} ${minmaxforce1[@]}); minmaxforce1=$(echo "${minmaxforce1[@]}" | xargs)
+minrmsforce1=$(printf '%s\n' "${rmsforce[@]}" | grep -n ${minrmsforce//-/} | cut -d ':' -f 1)
+selectedsteps=(${selectedsteps[@]} ${minrmsforce1[@]}); minrmsforce1=$(echo "${minrmsforce1[@]}" | xargs)
+minmaxdispl1=$(printf '%s\n' "${maxdispl[@]}" | grep -n ${minmaxdispl//-/} | cut -d ':' -f 1)
+selectedsteps=(${selectedsteps[@]} ${minmaxdispl1[@]}); minmaxdispl1=$(echo "${minmaxdispl1[@]}" | xargs)
+minrmsdispl1=$(printf '%s\n' "${rmsdispl[@]}" | grep -n ${minrmsdispl//-/} | cut -d ':' -f 1)
+selectedsteps=(${selectedsteps[@]} ${minrmsdispl1[@]}); minrmsdispl1=$(echo "${minrmsdispl1[@]}" | xargs)
+minaltogether1=$(printf '%s\n' "${altogether[@]}" | grep -n ${minaltogether//-/} | cut -d ':' -f 1)
+#echo ${selectedsteps[@]}; echo ${minaltogether1[@]}
+selectedsteps=(${selectedsteps[@]} ${minaltogether1[@]}); minaltogether1=$(echo "${minaltogether1[@]}" | xargs)
+minaltogether3=$(printf '%s\n' "${altogether2[@]}" | grep -n ${minaltogether2//-/} | cut -d ':' -f 1)
+selectedsteps=(${selectedsteps[@]} ${minaltogether3[@]}); minaltogether3=$(echo "${minaltogether3[@]}" | xargs)
+
+selectedsteps=($(tr ' ' '\n' <<< "${selectedsteps[@]}" | sort -u | tr '\n' ' '))
+bestpyres=(0)
+
+for rohrdanz in ${selectedsteps[@]}; do
+    pycomanda=('python -c "print(round('${maxforce[$((rohrdanz-1))]}'/'${convergence[0]}',5))"' 'python -c "print(round('${rmsforce[$((rohrdanz-1))]}'/'${convergence[1]}',5))"' 'python -c "print(round('${maxdispl[$((rohrdanz-1))]}'/'${convergence[2]}',5))"' 'python -c "print(round('${rmsdispl[$((rohrdanz-1))]}'/'${convergence[3]}',5))"' )
+    if [ -z "$(grep 'round(/' <<< ${pycomanda[0]})" ] && [ -z "$(grep '/)' <<< ${pycomanda[0]})" ]; then
+	pyres=($(eval ${pycomanda[0]}) $(eval ${pycomanda[1]}) $(eval ${pycomanda[2]}) $(eval ${pycomanda[3]}) ${altogether[$((rohrdanz-1))]} ${altogether2[$((rohrdanz-1))]})
+	bestpyres=(${bestpyres[@]} $(python2.4 -c 'import math; print(round(1000*sum(['$(echo ${pyres[@]} | xargs | tr ' ' ',')']),5))'))
+    fi
+done
+
+#echo "Best pyres is ${bestpyres[@]}"
+
+IFS=$'\n' bestestpyres=($(sort -n <<< "${bestpyres[*]}")); unset IFS; bestestpyres=${bestestpyres[1]}
+bestestpyres=($(printf '%s\n' "${bestpyres[@]}" | grep -n $bestestpyres | cut -d ':' -f 1))
+#echo "Bestest pyres is $bestestpyres"
+
+recommendedstep=${selectedsteps[$((bestestpyres-2))]}
+
+# Generating 'autocorrelation' functions to detect cycling
+for moveton in $(seq 0 $((nstep-1))); do # starts with 0!
+    [ $moveton -gt 1 ] && autocorr2=(${autocorr2[@]} $(logdife.py ${maxforce[$moveton]} ${maxforce[$((moveton-2))]} 0.00045)) || autocorr2=(${autocorr2[@]} 7)
+    #echo "logdife.py ${maxforce[$moveton]} ${maxforce[$((moveton-2))]}"
+    [ $moveton -gt 1 ] && autocorr2d=(${autocorr2d[@]} $(logdife.py ${maxdispl[$moveton]} ${maxdispl[$((moveton-2))]} 0.0018)) || autocorr2d=(${autocorr2d[@]} 7)
+    #echo "$moveton: ${#autocorr2[@]} ${autocorr2[$moveton]}; ${maxforce[$moveton]}; ${maxforce[$((moveton-4))]}"
+    [ $moveton -gt 2 ] && autocorr3=(${autocorr3[@]} $(logdife.py ${maxforce[$moveton]} ${maxforce[$((moveton-3))]} 0.00045)) || autocorr3=(${autocorr3[@]} 7)
+    [ $moveton -gt 3 ] && autocorr4=(${autocorr4[@]} $(logdife.py ${maxforce[$moveton]} ${maxforce[$((moveton-4))]} 0.00045)) || autocorr4=(${autocorr4[@]} 7)
+    [ $moveton -gt 4 ] && autocorr5=(${autocorr5[@]} $(logdife.py ${maxforce[$moveton]} ${maxforce[$((moveton-5))]} 0.00045)) || autocorr5=(${autocorr5[@]} 7)
+    [ $moveton -gt 4 ] && autocorr5d=(${autocorr5d[@]} $(logdife.py ${maxdispl[$moveton]} ${maxdispl[$((moveton-5))]} 0.0018)) || autocorr5d=(${autocorr5d[@]} 7)
+    [ $moveton -gt 5 ] && autocorr6=(${autocorr6[@]} $(logdife.py ${maxforce[$moveton]} ${maxforce[$((moveton-6))]} 0.00045)) || autocorr6=(${autocorr6[@]} 7)
+    [ $moveton -gt 6 ] && autocorr7=(${autocorr7[@]} $(logdife.py ${maxforce[$moveton]} ${maxforce[$((moveton-7))]} 0.00045)) || autocorr7=(${autocorr7[@]} 7)
+    [ $moveton -gt 7 ] && autocorr8=(${autocorr8[@]} $(logdife.py ${maxforce[$moveton]} ${maxforce[$((moveton-8))]} 0.00045)) || autocorr8=(${autocorr8[@]} 7)
+done
+
+foundcycless=0; cystart=(0)
+movav2=(0)
+for dunda in $(seq 5 $((${#autocorr2[@]}-1))); do
+    [ $dunda -lt 5 ] && break
+    nac2=6
+    ac2=(${autocorr2[@]:$((dunda-5)):6}); bulka=0 #; echo "$dunda: Last log10(AC2): ${ac2[@]}"
+    for moveton in $(seq 0 5); do
+	[ $((moveton+1)) -gt ${#ac2[@]} ] && { nac2=$((nac2-1)); break; }
+	[ ${ac2[$moveton]} -gt -30 ] && bulka=$((bulka+${ac2[$moveton]})) || nac2=$((nac2-1))
+	#echo "bulka is $bulka; nac2 is $nac2"
+    done
+    (($nac2==0)) && movav2=(${movav2[@]} -100) || movav2=(${movav2[@]} $((bulka/$nac2)))
+    #echo "==="
+done
+#echo "${movav2[@]}";echo
+cystart[0]=0
+for dunda in $(seq 1 $((${#movav2[@]}-1))); do
+    [ ${movav2[$dunda]} -le -5 -a ${movav2[$((dunda-1))]} -le -5 ] && { cystart[0]=$((dunda-1)); break; } #|| echo "$dunda: ${movav2[$dunda]}, ${movav2[$((dunda-1))]}" # starts at dunda-1 in movav2, which starts at step 2 as autocorr2 starts at step 3; but movav2 describes last 6 steps, so cycling starts 5 steps earlier
+done
+#echo "Bulka is $bulka, while nac2 is $nac2."
+[ $(echo ${movav2[@]} | xargs | rev | cut -d ' ' -f 1 | rev) -le -5 ] && foundcycless=$((foundcycless+1)) || cystart[0]=100500
+#exit 1
+
+movav2=(0)
+for dunda in $(seq 5 $((${#autocorr2d[@]}-1))); do
+    [ $dunda -lt 5 ] && break
+    nac2=6
+    ac2=(${autocorr2d[@]:$((dunda-5)):6}); bulka=0 #; echo "$dunda: Last log10(AC2): ${ac2[@]}"
+    for moveton in $(seq 0 5); do
+	[ $((moveton+1)) -gt ${#ac2[@]} ] && { nac2=$((nac2-1)); break; }
+	[ ${ac2[$moveton]} -gt -30 ] && bulka=$((bulka+${ac2[$moveton]})) || nac2=$((nac2-1))
+    done
+    (($nac2==0)) && movav2=(${movav2[@]} -100) || movav2=(${movav2[@]} $((bulka/$nac2)))
+done
+#echo "${movav2[@]}";echo
+cystart[5]=0
+for dunda in $(seq 1 $((${#movav2[@]}-1))); do
+    [ ${movav2[$dunda]} -le -5 -a ${movav2[$((dunda-1))]} -le -5 ] && { cystart[5]=$((dunda-1)); break; } #|| echo "$dunda: ${movav2[$dunda]}, ${movav2[$((dunda-1))]}" # starts at dunda-1 in movav2, which starts at step 2 as autocorr2 starts at step 3; but movav2 describes last 6 steps, so cycling starts 5 steps earlier
+done
+#echo "Bulka is $bulka, while nac2 is $nac2."
+[ $(echo ${movav2[@]} | xargs | rev | cut -d ' ' -f 1 | rev) -le -5 ] && foundcycless=$((foundcycless+1)) || cystart[5]=100500
+
+movav2=(0)
+for dunda in $(seq 6 $((${#autocorr3[@]}-1))); do
+    [ $dunda -lt 6 ] && break
+    nac2=7
+    ac2=(${autocorr3[@]:$((dunda-6)):7}); bulka=0 #; echo "$dunda: Last log10(AC3): ${ac2[@]}"
+    for moveton in $(seq 0 6); do
+	[ $((moveton+1)) -gt ${#ac2[@]} ] && { nac2=$((nac2-1)); break; }
+	[ ${ac2[$moveton]} -gt -30 ] && bulka=$((bulka+${ac2[$moveton]})) || nac2=$((nac2-1))
+    done
+    (($nac2==0)) && movav2=(${movav2[@]} -100) || movav2=(${movav2[@]} $((bulka/$nac2)))
+done
+#echo "${movav2[@]}";echo
+cystart[1]=0
+for dunda in $(seq 1 $((${#movav2[@]}-1))); do
+    [ ${movav2[$dunda]} -le -5 -a ${movav2[$((dunda-1))]} -le -5 ] && { cystart[1]=$((dunda-2)); break; } #|| echo "$((dunda-1)): ${movav2[$dunda]}, ${movav2[$((dunda-1))]}" # starts at dunda-1 in movav2, which starts at step 3 as autocorr3 starts at step 4; but movav2 describes last 7 steps, so cycling starts 6 steps earlier
+done
+#echo "Bulka is $bulka, while nac2 is $nac2."
+[ $(echo ${movav2[@]} | xargs | rev | cut -d ' ' -f 1 | rev) -le -5 ] && foundcycless=$((foundcycless+1)) || cystart[1]=100500
+
+movav2=(0)
+for dunda in $(seq 7 $((${#autocorr4[@]}-1))); do
+    [ $dunda -lt 7 ] && break
+    nac2=8
+    ac2=(${autocorr4[@]:$((dunda-7)):8}); bulka=0 #; echo "$dunda: Last log10(AC4): ${ac2[@]}"
+    for moveton in $(seq 0 7); do
+	[ $((moveton+1)) -gt ${#ac2[@]} ] && { nac2=$((nac2-1)); break; }
+	[ ${ac2[$moveton]} -gt -30 ] && bulka=$((bulka+${ac2[$moveton]})) || nac2=$((nac2-1))
+    done
+    (($nac2==0)) && movav2=(${movav2[@]} -100) || movav2=(${movav2[@]} $((bulka/$nac2)))
+done
+#echo "${movav2[@]}";echo
+cystart[2]=0
+for dunda in $(seq 1 $((${#movav2[@]}-1))); do
+    [ ${movav2[$dunda]} -le -5 -a ${movav2[$((dunda-1))]} -le -5 ] && { cystart[2]=$((dunda-3)); break; } #|| echo "$((dunda-2)): ${movav2[$dunda]}, ${movav2[$((dunda-1))]}" # starts at dunda-1 in movav2, which starts at step 4 as autocorr4 starts at step 5; but movav2 describes last 8 steps, so cycling starts 7 steps earlier
+done
+#echo "Bulka is $bulka, while nac2 is $nac2."
+[ $(echo ${movav2[@]} | xargs | rev | cut -d ' ' -f 1 | rev) -le -5 ] && foundcycless=$((foundcycless+1)) || cystart[2]=100500
+
+movav2=(0)
+for dunda in $(seq 8 $((${#autocorr5[@]}-1))); do
+    [ $dunda -lt 8 ] && break
+    nac2=9
+    ac2=(${autocorr5[@]:$((dunda-8)):9}); bulka=0 #; echo "$dunda: Last log10(AC5): ${ac2[@]}"
+    for moveton in $(seq 0 8); do
+	[ $((moveton+1)) -gt ${#ac2[@]} ] && { nac2=$((nac2-1)); break; }
+	[ ${ac2[$moveton]} -gt -30 ] && bulka=$((bulka+${ac2[$moveton]})) || nac2=$((nac2-1))
+    done
+    (($nac2==0)) && movav2=(${movav2[@]} -100) || movav2=(${movav2[@]} $((bulka/$nac2)))
+done
+#echo "${movav2[@]}";echo
+cystart[3]=0
+for dunda in $(seq 1 $((${#movav2[@]}-1))); do
+    [ ${movav2[$dunda]} -le -5 -a ${movav2[$((dunda-1))]} -le -5 ] && { cystart[3]=$((dunda-4)); break; } #|| echo "$((dunda-3)): ${movav2[$dunda]}, ${movav2[$((dunda-1))]}" # starts at dunda-1 in movav2, which starts at step 5 as autocorr5 starts at step 6; but movav2 describes last 9 steps, so cycling starts 8 steps earlier
+done
+#echo "Bulka is $bulka, while nac2 is $nac2."
+[ $(echo ${movav2[@]} | xargs | rev | cut -d ' ' -f 1 | rev) -le -5 ] && foundcycless=$((foundcycless+1)) || cystart[3]=100500
+
+movav2=(0)
+for dunda in $(seq 8 $((${#autocorr5d[@]}-1))); do
+    [ $dunda -lt 8 ] && break
+    nac2=9
+    ac2=(${autocorr5d[@]:$((dunda-8)):9}); bulka=0 #; echo "$dunda: Last log10(AC5): ${ac2[@]}"
+    for moveton in $(seq 0 8); do
+	[ $((moveton+1)) -gt ${#ac2[@]} ] && { nac2=$((nac2-1)); break; }
+	[ ${ac2[$moveton]} -gt -30 ] && bulka=$((bulka+${ac2[$moveton]})) || nac2=$((nac2-1))
+    done
+    (($nac2==0)) && movav2=(${movav2[@]} -100) || movav2=(${movav2[@]} $((bulka/$nac2)))
+done
+#echo "${movav2[@]}";echo
+cystart[6]=0
+for dunda in $(seq 1 $((${#movav2[@]}-1))); do
+    [ ${movav2[$dunda]} -le -5 -a ${movav2[$((dunda-1))]} -le -5 ] && { cystart[6]=$((dunda-4)); break; } #|| echo "$dunda: ${movav2[$dunda]}, ${movav2[$((dunda-1))]}" # starts at dunda-1 in movav2, which starts at step 5 as autocorr5 starts at step 6; but movav2 describes last 9 steps, so cycling starts 8 steps earlier
+done
+#echo "Bulka is $bulka, while nac2 is $nac2."
+[ $(echo ${movav2[@]} | xargs | rev | cut -d ' ' -f 1 | rev) -le -5 ] && foundcycless=$((foundcycless+1)) || cystart[6]=100500
+
+
+movav2=(0)
+for dunda in $(seq 9 $((${#autocorr6[@]}-1))); do
+    [ $dunda -lt 9 ] && break
+    nac2=10
+    ac2=(${autocorr6[@]:$((dunda-9)):10}); bulka=0 #; echo "$dunda: Last log10(AC6): ${ac2[@]}"
+    for moveton in $(seq 0 9); do
+	[ $((moveton+1)) -gt ${#ac2[@]} ] && { nac2=$((nac2-1)); break; }
+	[ ${ac2[$moveton]} -gt -30 ] && bulka=$((bulka+${ac2[$moveton]})) || nac2=$((nac2-1))
+    done
+    (($nac2==0)) && movav2=(${movav2[@]} -100) || movav2=(${movav2[@]} $((bulka/$nac2)))
+done
+#echo "${movav2[@]}";echo
+cystart[4]=0
+for dunda in $(seq 1 $((${#movav2[@]}-1))); do
+    [ ${movav2[$dunda]} -le -5 -a ${movav2[$((dunda-1))]} -le -5 ] && { cystart[4]=$((dunda-5)); break; } # || echo "$((dunda-4)): ${movav2[$dunda]}, ${movav2[$((dunda-1))]}" # starts at dunda-1 in movav2, which starts at step 6 as autocorr6 starts at step 7; but movav2 describes last 10 steps, so cycling starts 9 steps earlier
+done
+#echo "Bulka is $bulka, while nac2 is $nac2."
+[ $(echo ${movav2[@]} | xargs | rev | cut -d ' ' -f 1 | rev) -le -5 ] && foundcycless=$((foundcycless+1)) || cystart[4]=100500
+
+
+movav2=(0)
+for dunda in $(seq 10 $((${#autocorr7[@]}-1))); do
+    [ $dunda -lt 10 ] && break
+    nac2=11
+    ac2=(${autocorr7[@]:$((dunda-10)):11}); bulka=0 #; echo "$dunda: Last log10(AC7): ${ac2[@]}"
+    for moveton in $(seq 0 10); do
+	[ $((moveton+1)) -gt ${#ac2[@]} ] && { nac2=$((nac2-1)); break; }
+	[ ${ac2[$moveton]} -gt -30 ] && bulka=$((bulka+${ac2[$moveton]})) || nac2=$((nac2-1))
+    done
+    (($nac2==0)) && movav2=(${movav2[@]} -100) || movav2=(${movav2[@]} $((bulka/$nac2)))
+done
+#echo "${movav2[@]}";echo
+cystart[7]=0
+for dunda in $(seq 1 $((${#movav2[@]}-1))); do
+    [ ${movav2[$dunda]} -le -5 -a ${movav2[$((dunda-1))]} -le -5 ] && { cystart[7]=$((dunda-6)); break; } # || echo "$((dunda-4)): ${movav2[$dunda]}, ${movav2[$((dunda-1))]}" # starts at dunda-1 in movav2, which starts at step 7 as autocorr7 starts at step 8; but movav2 describes last 11 steps, so cycling starts 9 steps earlier
+done
+#echo "Bulka is $bulka, while nac2 is $nac2."
+[ $(echo ${movav2[@]} | xargs | rev | cut -d ' ' -f 1 | rev) -le -5 ] && foundcycless=$((foundcycless+1)) || cystart[7]=100500
+
+
+movav2=(0)
+for dunda in $(seq 11 $((${#autocorr8[@]}-1))); do
+    [ $dunda -lt 11 ] && break
+    nac2=12
+    ac2=(${autocorr6[@]:$((dunda-11)):12}); bulka=0 #; echo "$dunda: Last log10(AC8): ${ac2[@]}"
+    for moveton in $(seq 0 11); do
+	[ $((moveton+1)) -gt ${#ac2[@]} ] && { nac2=$((nac2-1)); break; }
+	[ ${ac2[$moveton]} -gt -30 ] && bulka=$((bulka+${ac2[$moveton]})) || nac2=$((nac2-1))
+    done
+    (($nac2==0)) && movav2=(${movav2[@]} -100) || movav2=(${movav2[@]} $((bulka/$nac2)))
+done
+#echo "${movav2[@]}";echo
+cystart[8]=0
+for dunda in $(seq 1 $((${#movav2[@]}-1))); do
+    [ ${movav2[$dunda]} -le -5 -a ${movav2[$((dunda-1))]} -le -5 ] && { cystart[8]=$((dunda-7)); break; } # || echo "$((dunda-4)): ${movav2[$dunda]}, ${movav2[$((dunda-1))]}" # starts at dunda-1 in movav2, which starts at step 8 as autocorr8 starts at step 9; but movav2 describes last 12 steps, so cycling starts 10 steps earlier
+done
+#echo "Bulka is $bulka, while nac2 is $nac2."
+[ $(echo ${movav2[@]} | xargs | rev | cut -d ' ' -f 1 | rev) -le -5 ] && foundcycless=$((foundcycless+1)) || cystart[8]=100500
+
+IFS=$'\n' cystart1=($(sort -n <<<"${cystart[*]}")); unset IFS; cystart1=${cystart1[0]}
+
+[ $cystart1 -le 0 ] && cystart1=1
+
+if [ $foundcycless -eq 0 -o $foundcycless -gt 5 ]; then # -gt 5: forces have calmed down and lie below the threshold
+	sleep 0.1
+elif [ $cystart1 -gt 5 ]; then
+	minenergia=(${energias[@]:0:$((cystart1-4))})
+	minmaxforce=(${maxforce[@]:0:$((cystart1-4))})
+	minrmsforce=(${rmsforce[@]:0:$((cystart1-4))})
+	minmaxdispl=(${maxdispl[@]:0:$((cystart1-4))})
+	minrmsdispl=(${rmsdispl[@]:0:$((cystart1-4))})
+	minaltogether=(${altogether[@]:0:$((cystart1-4))})
+	minaltogether2=(${altogether2[@]:0:$((cystart1-4))})
+	IFS=$'\n' minenergia=($(sort -n <<<"${minenergia[*]}")); unset IFS; minenergia=${minenergia[0]}
+	IFS=$'\n' minmaxforce=($(sort -n <<<"${minmaxforce[*]}")); unset IFS; minmaxforce=${minmaxforce[0]}
+	IFS=$'\n' minrmsforce=($(sort -n <<<"${minrmsforce[*]}")); unset IFS; minrmsforce=${minrmsforce[0]}
+	IFS=$'\n' minmaxdispl=($(sort -n <<<"${minmaxdispl[*]}")); unset IFS; minmaxdispl=${minmaxdispl[0]}
+	IFS=$'\n' minrmsdispl=($(sort -n <<<"${minrmsdispl[*]}")); unset IFS; minrmsdispl=${minrmsdispl[0]}
+	IFS=$'\n' minaltogether=($(sort -n <<<"${minaltogether[*]}")); unset IFS; minaltogether=${minaltogether[0]}
+	IFS=$'\n' minaltogether2=($(sort -n <<<"${minaltogether2[*]}")); unset IFS; minaltogether2=${minaltogether2[0]}
+	#echo -e "$minmaxforce\t$minrmsforce\t$minmaxdispl\t$minrmsdispl\t$minaltogether"
+
+	minenergia1=($(printf '%s\n' "${energias[@]:0:$((cystart1-1))}" | grep -n ${minenergia:2} | cut -d ':' -f 1))
+	selectedsteps=(${minenergia1[@]}); minenergia1=$(echo "${minenergia1[@]}" | xargs)
+	minmaxforce1=$(printf '%s\n' "${maxforce[@]:0:$((cystart1-1))}" | grep -n ${minmaxforce:2} | cut -d ':' -f 1)
+	selectedsteps=(${selectedsteps[@]} ${minmaxforce1[@]}); minmaxforce1=$(echo "${minmaxforce1[@]}" | xargs)
+	minrmsforce1=$(printf '%s\n' "${rmsforce[@]:0:$((cystart1-1))}" | grep -n ${minrmsforce:2} | cut -d ':' -f 1)
+	selectedsteps=(${selectedsteps[@]} ${minrmsforce1[@]}); minrmsforce1=$(echo "${minrmsforce1[@]}" | xargs)
+	minmaxdispl1=$(printf '%s\n' "${maxdispl[@]:0:$((cystart1-1))}" | grep -n ${minmaxdispl:2} | cut -d ':' -f 1)
+	selectedsteps=(${selectedsteps[@]} ${minmaxdispl1[@]}); minmaxdispl1=$(echo "${minmaxdispl1[@]}" | xargs)
+	minrmsdispl1=$(printf '%s\n' "${rmsdispl[@]:0:$((cystart1-1))}" | grep -n ${minrmsdispl:2} | cut -d ':' -f 1)
+	selectedsteps=(${selectedsteps[@]} ${minrmsdispl1[@]}); minrmsdispl1=$(echo "${minrmsdispl1[@]}" | xargs)
+	minaltogether1=$(printf '%s\n' "${altogether[@]:0:$((cystart1-1))}" | grep -n ${minaltogether:2} | cut -d ':' -f 1)
+	selectedsteps=(${selectedsteps[@]} ${minaltogether1[@]}); minaltogether1=$(echo "${minaltogether1[@]}" | xargs)
+	minaltogether3=$(printf '%s\n' "${altogether2[@]:0:$((cystart1-1))}" | grep -n ${minaltogether2:2} | cut -d ':' -f 1)
+	selectedsteps=(${selectedsteps[@]} ${minaltogether3[@]}); minaltogether3=$(echo "${minaltogether3[@]}" | xargs)
+	
+	selectedsteps=($(tr ' ' '\n' <<< "${selectedsteps[@]}" | sort -u | tr '\n' ' '))
+	
+	bestpyres=(0)
+	
+	for rohrdanz in ${selectedsteps[@]}; do
+	    pycomanda=('python -c "print(round('${maxforce[$((rohrdanz-1))]}'/'${convergence[0]}',5))"' 'python -c "print(round('${rmsforce[$((rohrdanz-1))]}'/'${convergence[1]}',5))"' 'python -c "print(round('${maxdispl[$((rohrdanz-1))]}'/'${convergence[2]}',5))"' 'python -c "print(round('${rmsdispl[$((rohrdanz-1))]}'/'${convergence[3]}',5))"' )
+	    if [ -z "$(grep 'round(/' <<< ${pycomanda[0]})" ] && [ -z "$(grep '/)' <<< ${pycomanda[0]})" ]; then
+		pyres=($(eval ${pycomanda[0]}) $(eval ${pycomanda[1]}) $(eval ${pycomanda[2]}) $(eval ${pycomanda[3]}) ${altogether[$((rohrdanz-1))]} ${altogether2[$((rohrdanz-1))]})
+		bestpyres=(${bestpyres[@]} $(python2.4 -c 'import math; print(round(1000*sum(['$(echo ${pyres[@]} | xargs | tr ' ' ',')']),5))'))
+	    fi
+	done
+	
+	IFS=$'\n' bestestpyres=($(sort -n <<< "${bestpyres[*]}")); unset IFS; bestestpyres=${bestestpyres[1]}
+	bestestpyres=($(printf '%s\n' "${bestpyres[@]}" | grep -n $bestestpyres | cut -d ':' -f 1))
+	recommendedstep=${selectedsteps[$((bestestpyres-2))]}
+else	
+	echo -1; exit 1
+fi
+
+echo $recommendedstep
+rm padalproshlogodniysneg.foo
+

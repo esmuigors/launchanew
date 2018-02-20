@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# $1: .OUT filename; $2: how many jobs to subtract from $totjobs; $3: which step to use
+
+semiloggus=$GAUSS_LNCHDIR"/FiMiGeAu_$(uname -n).logg"
+: > $semiloggus
+wywadz=${1%.out}.gem
+
+[ -n "$2" ] && myjob=$2 || myjob=0
+totjobs=$(grep -c "Entering Link 1" $1)
+echo "Total jobs: $totjobs" >> $semiloggus
+[[ ! $totjobs -eq 1 ]] && myjob=$((totjobs-$myjob)) || myjob=$totjobs
+echo "Selected job: $myjob" >> $semiloggus
+cp $1 padalproshlogodniysneg.foo
+if [[ ! $myjob -eq 1 ]]; then
+    line=($(grep -n -m $((myjob-1)) "Normal termination" padalproshlogodniysneg.foo | cut -d : -f 1))
+    sed -i "1,${line[$myjob-2]} d" padalproshlogodniysneg.foo
+fi
+
+if [[ ! $myjob -eq $totjobs ]]; then
+    line=($(grep -n -E "Normal termination|Error termination" padalproshlogodniysneg.foo | cut -d : -f 1))
+#    echo "Blanking command is $((line+1)),$ d, while array element is $line."
+    sed -i "$((line+1)),$ d" padalproshlogodniysneg.foo
+fi
+totsteps=$(grep -c "Standard orientation" padalproshlogodniysneg.foo)
+[ -n "$3" ] && mingeomstep=$3 || mingeomstep=$totsteps
+echo "Number of steps: $totsteps" >> $semiloggus
+echo "Selected step: $mingeomstep" >> $semiloggus
+
+for moveton in $(seq 1 $mingeomstep); do
+    sed -i '1,/Standard orientation/d' padalproshlogodniysneg.foo
+done
+sed -i '1,4d' padalproshlogodniysneg.foo
+sed -n -i '1,/----/p' padalproshlogodniysneg.foo
+sed -i '$d' padalproshlogodniysneg.foo
+>> padalproshlogodniysneg.foo
+awk '$1,$0 = "AT"$2"  "$4"  "$5"  "$6' < padalproshlogodniysneg.foo > $wywadz
+sed 's/AT14/Si/' -i $wywadz
+sed 's/AT15/P/' -i $wywadz
+sed 's/AT16/S/' -i $wywadz
+sed 's/AT17/Cl/' -i $wywadz
+sed 's/AT35/Br/' -i $wywadz
+sed 's/AT53/I/' -i $wywadz
+sed 's/AT34/Se/' -i $wywadz
+sed 's/AT33/As/' -i $wywadz
+sed 's/AT32/Ge/' -i $wywadz
+sed 's/AT31/Ga/' -i $wywadz
+sed 's/AT49/In/' -i $wywadz
+sed 's/AT50/Sn/' -i $wywadz
+sed 's/AT51/Sb/' -i $wywadz
+sed 's/AT26/Fe/' -i $wywadz
+sed 's/AT77/Ir/' -i $wywadz
+sed 's/AT78/Pt/' -i $wywadz
+sed 's/AT44/Ru/' -i $wywadz
+sed 's/AT45/Rh/' -i $wywadz
+sed 's/AT46/Pd/' -i $wywadz
+sed 's/AT76/Os/' -i $wywadz
+sed 's/AT29/Cu/' -i $wywadz
+sed 's/AT30/Zn/' -i $wywadz
+sed 's/AT22/Ti/' -i $wywadz
+sed 's/AT6/C/' -i $wywadz # all single-figure numbers must be at the end! otherwise H6, H7 and so on will appear instead of S, Cl, etc.
+sed 's/AT1/H/' -i $wywadz
+sed 's/AT7/N/' -i $wywadz
+sed 's/AT8/O/' -i $wywadz
+sed 's/AT5/B/' -i $wywadz
+sed 's/AT9/F/' -i $wywadz
+sed 's/AT3/Li/' -i $wywadz
+rm padalproshlogodniysneg.foo
+dos2unix -q $wywadz
+echo $wywadz
+

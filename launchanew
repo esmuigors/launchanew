@@ -1,0 +1,275 @@
+#!/bin/bash
+# I hope this will be useful...
+echo "----------------------------------------------------------------------------"
+echo "Launchanew version 0.8.9.8.8.8"
+
+. ~/bin/liblaunchanew
+
+whatineedfunc(){
+	echo ; echo "USAGE REQUIREMENTS:"
+	echo "1. $(tput setaf 6)perl$(tput sgr0); $(tput setaf 6)sed$(tput sgr0); $(tput setaf 6)awk$(tput sgr0); if You want to use problem solver, then also $(tput setaf 6)python$(tput sgr0). This was tested on cluster with quite ancient versions of them, so hopefully Yours will not be too old..."
+	echo "2. input files MUST have title section constructed in the following manner:"
+	echo -e "\t::: input_geometry_filename* output_geometry_filename* job_group_name** job_processing_sub_name multistep_job_name** job_step_in_multistep_job***"
+	echo "* should match if not optimization"
+	echo "** we use automated extraction of job results and storing in database in the form of spreadsheet files; hence, $(tput setaf 5)job_group_name$(tput sgr0) is the name of a sheet inside such a file (one file for each compound); $(tput setaf 5)multistep_job_name$(tput sgr0) is the name of compound job -- it is useful to group Your jobs in the batch file; for instance, Ionization job consists of three steps (neutral molecule, cation, anion), with $(tput setaf 5)multistep_job_name$(tput sgr0)=Ionization and $(tput setaf 5)job_step_in_multistep_job$(tput sgr0)=(1; 2; 3). ExcitedStateAbsorption will have the 1st step -- a single point with storing the 'slow' component of the reaction field and the 2nd step -- the TD calculation itself."
+	echo -e "$(tput bold)For launchanew to work properly, You only need to set $(tput setaf 5)multistep_job_name$(tput sgr0; tput bold) and $(tput setaf 5)job_step_in_multistep_job$(tput sgr0; tput bold) for each job title section -- why this is needed can be seen in description for options -c and -d.$(tput sgr0) For example, You can use such title section:\n\t::: a b c d e 1\n$(tput bold)Notice, however,$(tput sgr0) that the first step of a geometry optimization is recognized by matching 'GeometryOptimization 1', but You can modify the script to match Your names. We actually advice You to use such a naming system -- it is really convenient to use for large batches of computations."
+	echo "Sometimes there is need for jobs that are not going to be archived (not like it is defined by Gaussian, as any job with IOps is NOT archived by default). For example, fragmented or other sophisticated guesses, or jobs froducing natural orbitals, etc. We are used to mark such jobs by setting their geometries to 0000_000 0000_000 (see description of -z keyword)."
+	echo "*** an integer from 1 to 9 (can You imagine a job with 10 steps?!)"
+	echo "3. You must add to Your ~/.bashrc or ~/.bash_profile the following:"
+	echo -e "\t GAUSS_SPRSCRDIR=/path/to/additional/scratch/directory/other/than/one/set/in/GAUSS_SCRDIR"
+	echo -e "\t GAUSS_LNCHDIR=/path/to/directory/containing/input/output/and/checkpoint/files"
+	echo -e "\t export \$GAUSS_SPRSCRDIR \$GAUSS_LNCHDIR"
+	echo "4 (optional). lutil commands marked as Gaussian comments (starting with $(tput setaf 3)!lutil$(tput sgr0) in an input file). We use these for things like splitting large batch jobs so that output files are easier to be proceeded ($(tput setaf 3)!lutil echo 'Splitting..'$(tput sgr0)), or producing formatted checkpoint files right during  the batch job ($(tput setaf 3)!lutil formchk chk_name.chk$(tput sgr0)). As You can see, everything after the keyword !lutil is just executed as a bash command. When a !lutil line is encountered, the input file is split into two parts, named as /path/to/input/file_U1.gjf, /path/to/input/file_U2.gjf, and so on. $(tput bold)If You don't use them, it is OK for the script to work properly.$(tput sgr0)"
+}
+
+
+regtagad=false; regclean=true; helpme=false; stopifchk=true; multistepchk=true; useoldchk=false; trysolve=1; solvescf=0; solvefmm=0; solvegeom=0
+solveacc2=0; rmzero=true; rmdurakov=true; remmaxder=""; ramparam=false; whatineed=false; modrwf=true; nodalek=false; modproc=true
+
+while getopts "dracoshzmquwkp" myopts; do
+    case $myopts in
+	r) regtagad=true ;;
+	a) regclean=true ;;
+	d) stopifchk=false ;;
+	c) multistepchk=false ;;
+	o) useoldchk=true ;;
+	s) trysolve=0;;
+	z) rmzero=false;;
+	m) ramparam=true;;
+	u) rmdurakov=false;;
+	w) modrwf=false;;
+	p) modproc=false;;
+	k) nodalek=true;;
+	h) helpme=true;;
+	q) whatineed=true;;
+	\?) echo "Some specified options were not recognized. Try launchanew -h for information about available options." ;; # for cases of "invented" options
+    esac
+done
+while [[ "$#" -gt 0 ]]; do
+    if [[ -z "$(echo $1 | grep -e "-")" ]]; then break; else shift; fi
+    case "$1" in
+	--remove)	regtagad=true; shift ;;
+	--noalltimeneat) regclean=false; shift ;;
+	--ccheck)	multistepchk=false; shift ;;
+	--nodscheck)	stopifchk=false; shift ;;
+	--useoldchk)	useoldchk=true; shift ;;
+	--notrysolve)	trysolve=0; shift;;
+	--okzero)	rmzero=false; shift;;
+	--okstupid)	rmdurakov=false; shift;;
+	--norwfmod)	modrwf=false; shift;;
+	--noprocmod)	modproc=false; shift;;
+	--nodalek)	nodalek=true; shift;;
+	--monram)	ramparam=true; shift;;
+	--help)		helpme=true; shift ;;
+	--requirements)	whatineed=true; shift ;;
+	-*)		echo "Some specified options were not recognized. Try launchanew -h for information about available options."; shift ;; # for cases of "invented" options
+	*) ;;
+    esac
+done
+
+if [[ "$#" -gt 2 ]]; then helpme=true; whatineed=true; fi
+
+
+curinfile=$1; firstcurinfile=$curinfile
+#sos_save $firstcurinfile &
+# (Hopefully) solve geometry inconsistencies (blank lines among Cartesians - happens, You know)
+#sed -i '/[0-9.-][0-9.-]*/{:a;N;/--Link1--/!ba;s/(\([0-9.-][0-9.-]*\)\n\n\([ ]*[A-Za-z][A-Za-z]*[ ]*[0-9.-][0-9.-]*\))/\1\n\2/}' $curinfile
+
+if [[ -z $2 ]]; then curoutfile="${curinfile%gjf}out"; else curoutfile=$2; fi
+[ -n "$curinfile" ] && [ -n "$GAUSS_SPRSCRDIR" ] && [ -n "$(grep $GAUSS_SPRSCRDIR $1)" ] && [ ! -d $GAUSS_SPRSCRDIR ] && mkdir $GAUSS_SPRSCRDIR # if exists, an error will not be printed
+
+[ -z "$GAUSS_LNCHDIR" ] && whatineed=true
+
+
+if ( $helpme ) || { [[ "$#" = 0 ]] && ( ! $whatineed ); }; then
+	echo "Usage: launchanew.NNN [OPTIONS] /path/to/inputfile.gjf [/path/to/outputfile.out] [&> /path/to/logfile.logg] &"
+	echo "Script is intended to restart failed jobs and launch additional utilities. Every failure is reported to stdout and to $HOME/CalcLog.logg.$HOSTNAME file. Failed job inputs are copied to file /path/to/inputfile_failed.gjf. At the end all .out and .fchk files are compressed to /path/to/inputfile.tgz and to /path/to/inputfile_fchks.tgz, respectively. If the output file contains no 'Normal termination' lines, by default IT WILL BE DELETED after launchanew finishes; this can be overridden by specifying -u option."
+	echo "And congratulations are printed."
+	echo "If the name of input file is not specified, that of input file is used, replacing '.gjf' with '.out'."
+	echo "ATTENTION! New defaults starting from version 0.7."
+	echo "Whether to delete scratch files in $GAUSS_SCRDIR directory or not to do that:"
+	echo -e "   \e[1;32mno option\e[39;21m\tdo this after every misrun of Gaussian"
+	echo -e "   \e[1;32m-r\e[39;21m or \e[1;32m--remove\e[39;21m:\tdo this once in the beginning"
+	echo -e "   \e[1;32m-a\e[39;21m or \e[1;32m--noalltimeneat\e[39;21m:\tSUPPRESS DOING SO after every misrun of Gaussian."
+	echo "Behaviour regarding jobs using checkpoint files that were modified by failed jobs:"
+	echo -e "   \e[1;32mno option\e[39;21m:\tall jobs until the end of compound job will be omitted. A compound job contains multiple steps which are neede to obtain complete results."
+	echo -e "   \e[1;32m-c\e[39;21m or  \e[1;32m--ccheck\e[39;21m:\tjob using chk from job just failed will be omitted"
+	echo -e "   \e[1;32m-d\e[39;21m or \e[1;32m--nodscheck\e[39;21m:\tscript will NOT remove even steps remaining in the failed multistep job that used the .CHK"
+	echo -e "\e[1;32m-o\e[39;21m or \e[1;32m--useoldchk\e[39;21m:\tcontinue from the previous CHK file without foolproofing. By default, launchanew will abort if any of .chk files mentioned in the input are found in the present directory."
+	echo -e "\e[1;32m-s\e[39;21m or \e[1;32m--notrysolve\e[39;21m:\tscript will NOT try to solve SCF convergence or integration, or Opt=CalcAll or Polar problems, e.g., switch off FMM when neccessary."
+	echo -e "\e[1;32m-w\e[39;21m or \e[1;32m--norwfmod\e[39;21m:\tdo not modify the size or RWF files according to available disk on the node (You may have done it before using different parameters for determination of optimal RWF size)"
+	echo -e "\e[1;32m-p\e[39;21m or \e[1;32m--noprocmod\e[39;21m:\tdo not modify the available memory and number of CPU cores (You may have done it before using different parameters for determination of optimal memory size)"
+	echo -e "\e[1;32m-z\e[39;21m or \e[1;32m--okzero\e[39;21m:\tdo NOT remove after the calculation all those files title section of which starts with '::: 0000_000 0000_000'; these files were used to generate .FCHK with relevant data (NO, NTO, etc.)"
+	echo -e "\e[1;32m-u\e[39;21m or \e[1;32m--okstupid\e[39;21m:\tsuppress deletion of the output file if it contains no 'Normal termination's or a functional lacked abilities for a compound job"
+	echo -e "\e[1;32m-k\e[39;21m or \e[1;32m--nodalek\e[39;21m:\tallows to make job immune to the dalek (a script that is run constantly and every 60 minutes checks for hung-up script over the whole cluster)."
+	echo -e "\e[1;32m-m\e[39;21m or \e[1;32m--monram\e[39;21m:\trequest monitoring RAM usage every 5 minutes, with writing to file $HOME/MemLog.\$(uname -n).logg"
+	echo -e "\e[1;32m-q\e[39;21m or \e[1;32m--requirements\e[39;21m:\tdisplay requirements for this script"
+	echo -e "\e[1;32m-h\e[39;21m or \e[1;32m--help\e[39;21m:\tdisplay this help."
+	echo ; echo -e "Options CAN be specified in bulk (e. g., \e[2mlaunchanew -crom input.file\e[0m)."
+	( $whatineed ) && whatineedfunc
+	echo "--------------------------------------------------------------------------"
+	
+	exit 0
+elif ( $whatineed ); then
+	whatineedfunc; exit 0
+elif [ -f $curoutfile ]; then
+	echo -e "Please archive or delete old files with specified names first.\nNames causing problem:  $curoutfile"
+	exit 1
+elif [ ! -f $curinfile ]; then
+	echo "No input file! Something went wrong..."
+	exit 1
+fi
+
+mv -f $HOME/CalcLog.logg.$HOSTNAME $HOME/CalcLog.logg.$HOSTNAME.1
+touch $HOME/CalcLog.logg.$HOSTNAME
+( $regclean ) && echo "Will maintain scratch directories clean after each failed job." || echo "Will NOT clean up scratch directories."
+if ( $stopifchk ); then
+	echo "Will omit jobs with CHK modified by failed jobs."
+elif ( $multistepchk ); then
+	echo "Will omit jobs with CHK modified by failed jobs ONLY until the next GeometryOptimization."
+else
+	echo "Will NOT omit any job with CHK modified by failed jobs."
+fi
+( $useoldchk ) && echo "Will use old CHK files in this run." || echo "Will warn and stop if some of CHKs used in this input are already present in the working directory"
+[ $trysolve -gt 0 ] && echo "Will try to solve SCF convergence, integration and Opt=CalcAll issues." || echo "Will not try to solve anything."
+( $remzero ) && echo "Will remove from output files jobs whose title section starts with ::: 0000_000." || echo "Jobs whose title section starts with ::: 0000_000 will be treated as ordinary jobs."
+( $rmdurakov ) && echo "Will delete output file if it contains no 'Normal termination's or a functional lacked abilities for a compound job."
+( $modrwf ) && echo "Will modify RWF, Int and D2E file sizes according to the sizes of $GAUSS_SPRSCRDIR and $GAUSS_SCRDIR." || echo "Will NOT modify RWF, Int and D2E file sizes according to the sizes of $GAUSS_SPRSCRDIR and $GAUSS_SCRDIR, assuming this has been done more carefully."
+( $nodalek ) && echo "Will make the job invincible to dalek." || echo "Dalek can exterminate this job if it thinks it's appropriate."
+( $ramparam ) && echo "Will monitor RAM usage to stalk possible problems." || echo "Will not monitor RAM usage."
+
+listchk=""; foolproof $curinfile && goodchk=true || goodchk=false
+( ! $useoldchk ) && { ( $goodchk ) || { echo -e "Please either alter names of .CHK files used in the input file or delete old ones!\nNames causing problem:  $listchk";  exit 1; }; }
+getfchklist $curinfile; listchk=( $(echo $listchk | sed 's/^ //' | sed 's/ $//') )
+
+( $ramparam ) && monitram &
+( $nodalek ) && touch $HOME/antidalek.$(uname -n)
+
+if ( $regtagad ); then
+	getridofdirt
+	rwfname=$(grep -m 1 '%RWF=' $1 | cut -d ',' -f 5 )
+	[ -n "$rwfname" ] && { echo "Removing RWF file $rwfname..."; rm $rwfname && { rm ${rwfname%rwf}int && rm ${rwfname%rwf}d2e && echo "Removed also INT and D2E files."; }; }
+fi
+
+[ -n "$(grep -m 1 '%RWF=' $1)" ] && ( $modrwf ) && rwf2gjf $1
+
+[ $(wc -l < $HOME/CalcLog.logg.$HOSTNAME) -gt 200 ] && { echo "Cleaning up host's CalcLog..."; tail -200 $HOME/CalcLog.logg.$HOSTNAME > marcopolo.$HOSTNAME; marcopolo.$HOSTNAME > $HOME/CalcLog.logg.$HOSTNAME; }
+
+echo $(date) # to see when the calculation was started
+echo $(uname -n)
+echo "Main input file is $curinfile."; echo "Main output file is $curoutfile."
+echo "Used disk space is:"; du -h $GAUSS_SPRSCRDIR $GAUSS_SCRDIR $GAUSS_LNCHDIR; echo "Free disk space is:"; df -h $GAUSS_SPRSCRDIR $GAUSS_SCRDIR $GAUSS_LNCHDIR > batutaibn.$HOSTNAME &
+df_piddy=$!; sleep 7; disown $df_piddy; ( ps -p $df_piddy > /dev/null ) && kill -n 9 $df_piddy; [ $(wc -c < batutaibn.$HOSTNAME) -gt 0 ] && cat batutaibn.$HOSTNAME; rm batutaibn.$HOSTNAME; echo "====================="
+dos2unix $curinfile
+( $modproc ) && proc2gjf $1
+
+tutelka=5
+
+#############################3 debugging
+#	until [ $tutelka -eq 0 ]; do
+#	    checkout $curinfile $curoutfile && tutelka=0 || exit 1
+#	done
+################################3 end of debugging
+
+perl -0644 -i -pe 's/\n(.*[\S]+)\n(--Link1--)/\n$1\n\n$2/g' $curinfile # adding newlines before --Link1-- if they are missing
+perl -0644 -i -pe 's/(--Link1--)\n\n--Link1--/$1/g' $curinfile # removing spurious --Link1--
+>> $curinfile # adding last newline 'just in case'
+
+totlutil=$(grep -c '^!lutil' -o $curinfile); echo "Total number of utilities jobs to be launched is $totlutil."
+nrlutil=0; lnlutil=100500
+firstcuroutfile=${firstcurinfile%.gjf}.out
+until [ $lnlutil -lt 1 ] || [ $(wc -c < $curinfile) -lt 2 ]; do
+	((nrlutil++))
+	echo "DEBUG: enter lnlutil cycle (nrlutil=$nrlutil)"
+	[ ! -f ${firstcurinfile%.gjf}_U$nrlutil.gjf ] && cp $curinfile ${firstcurinfile%.gjf}_U$nrlutil.gjf
+	curinfile=${firstcurinfile%.gjf}_U$nrlutil.gjf
+	curoutfile=${firstcurinfile%.gjf}_U$nrlutil.out
+	lnlutil=$(grep -n '^!lutil' -m 1 -o $curinfile | cut -d : -f 1); lutilcomm=""
+	[ -z $lnlutil ] && elnlutil=$(wc -l < $curinfile) || elnlutil=$lnlutil
+	felnlutil=$elnlutil
+        until [ -z "$(sed '1,'$elnlutil'd' $curinfile | head -1 | grep lutil)" ]; do ((elnlutil++)); done
+	sed -n $((elnlutil+1))',$p' $curinfile > ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf
+	sed -i $((elnlutil+1))',$d' $curinfile
+	elnlutil=$felnlutil
+	sed -i 's/'${firstcuroutfile//\//\\\/}'/'$curoutfile'/' $curinfile # replaces all slashes (if present) in filename with backslashes
+	echo "DEBUG: next utility line is $lnlutil."
+	[ -z $lnlutil ] || lutilcomm=$(sed -n $elnlutil'p' $curinfile |sed 's/!lutil //')
+	echo "DEBUG: next utility command is: $lutilcomm, found by line: sed -n $elnlutil'p' $curinfile | sed 's/!lutil //'."
+	echo "Present input file is $curinfile"
+	if [ $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf) -gt 1 ]; then
+	    until [ -n "$(head -n 1 ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf | grep -e '%' -e '!lutil')" ] || [ $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf) -eq 0 ]; do
+	    sed '1 d' -i ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf
+	    done
+	else
+	    : > ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf
+	fi
+	echo "DEBUG: 1"
+	chmod a+r $curinfile # otherwise won't be read by g09
+	[ -f $curoutfile ] && rm $curoutfile # checkout vajag, lai nebutu, un lietotajs tika bridinats
+	echo "" >> $curinfile
+	echo "DEBUG: 2"
+	until [ $tutelka -eq 0 ]; do # launches Gaussian; then replaces Gen/GenECP in .OUT file with the designation provided in the input file
+	    outmorkovka=$curoutfile; inmorkovka=$curinfile
+		echo "DEBUG: before checkout and test"
+		echo "curinfile is $curinfile; curoutfile is $curoutfile"
+	    checkout $curinfile $curoutfile && tutelka=0 || { sed -i '/^:::/s/_/\//g' $curinfile; g09 < $curinfile > $curoutfile; sed -i '/^:::/s/\//_/g' $curinfile; sed -i '/^ :::/,/-----/s/\//_/g' $curoutfile; }
+	    lnmorkovka=1
+	    until [ $(grep -c -E '^ #[TNPtnp]* .*[/]Gen' $outmorkovka) -eq 0 ]; do
+		morkovka=$(sed -n $lnmorkovka',$p' $inmorkovka | grep '==GENBASISSET==' -m 1 | sed 's/\!==GENBASISSET==//;s/ //g')
+		lnmorkovka=$(sed -n $lnmorkovka',$p' $inmorkovka | grep '==GENBASISSET==' -n -m 1 | cut -d ':' -f 1);lnmorkovka=$((lnmorkovka+1))
+		echo "DEBUG: enter lnmorkovka cycle (lnmorkovka=$lnmorkovka; morkovka=$morkovka)"
+		sed -i '/Gen[ECP]*/{/^ #/{s/Gen[ECP]*/('${morkovka//;/\\\;}')/;:a;n;ba}}' $outmorkovka
+		[ -z "$morkovka" ] && sed -i '/()ECP/{/^ #/{s/()ECP/GenECP/;:a;n;ba}}' $outmorkovka || sed -i '/()ECP/{/^ #/{s/()ECP/('${morkovka//;/\\\;}')/;:a;n;ba}}' $outmorkovka # fallback option
+	    done
+	    echo "DEBUG: outmorkovka properties:     $(ls -l $outmorkovka)"
+	    echo "DEBUG: up to start next cycle (tutelka=$tutelka)"
+	done
+	for zhambayak in ${firstcurinfile%.gjf}*out; do
+		echo "DEBUG: line since which lfna works is $(( $(wc -l < $zhambayak)-$(tac $zhambayak | grep -n -m 1 '^ #' | cut -d ':' -f 1) ))"
+		[ $(lfna $zhambayak '^ :::' $(( $(wc -l < $zhambayak)-$(tac $zhambayak | grep -n -m 1 '^ Entering Link 1' | cut -d ':' -f 1) )) | grep -c 'GeomOpt') -eq 0 ] && ( $rmdurakov ) && doloiduraka $zhambayak # if there are no 'Normal terminations' or a functional lacked abilities for a compound job, the output will be deleted; not smth You want until the file is checked by checkout(), though...
+		echo "DEBUG: currently cleansed .out file properties:     $(ls -l $zhambayak)"
+	done
+	echo "DEBUG: outmorkovka properties:     $(ls -l $outmorkovka)"
+
+	if [ -n "$(echo $lutilcomm | grep getepsilon)" ]; then
+	    echo "DEBUG: enter getepsilon cycle ($lutilcomm)"
+	    eval $lutilcomm
+	    gepsinfile=$(cat zebra.getepsilon); gepsoutfile=${gepsinfile%.gjf}.out; erreps=false
+	    until ([ "$gepsinfile" == "exterminate" ] || $erreps); do
+		g09 < $gepsinfile > $gepsoutfile
+		[ -n "$(tail -5 $gepsoutfile | grep -e 'Error termina' -e 'g_write' -e 'End of file' -e 'on file out of r')" ] && erreps=true
+		lutilcomm=$(grep '^!lutil' -m 1 $gepsinfile | sed 's/!lutil //')
+		eval $lutilcomm
+		gepsinfile=$(cat zebra.getepsilon); gepsoutfile=${gepsinfile%.gjf}.out; erreps=false
+		#echo "Gepsinfile is $gepsinfile"
+	    done
+	elif [ -n "$lutilcomm" ]; then
+	    while [ -n "$lutilcomm" ]; do
+		eval $lutilcomm
+		echo "DEBUG: elnlutil was $elnlutil"
+		((elnlutil++)); lutilcomm=$(sed -n $elnlutil's/!lutil //' $curinfile)
+		echo "DEBUG: elnlutil is $elnlutil"
+	    done
+	fi
+	echo $(date); tutelka=5
+	echo "DEBUG: next filename, checked by wc, is ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf, with result $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf)."
+	[ $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf) -lt 3 ] && break
+done
+[ $(wc -c < ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf) -eq 0 ] && rm ${firstcurinfile%.gjf}_U$((1+$nrlutil)).gjf
+[ -f zebra.getepsilon ] && rm zebra.getepsilon
+[ -f bufa_launch ] && rm bufa_launch
+echo "DEBUG: exited cycles, about to launch cannotzero (rmzero=$rmzero)"
+if $rmzero; then
+   cannotzero 
+fi
+
+unix2dos ${firstcurinfile%.gjf}_U*
+[ 1 -lt $(ls -1 ${firstcurinfile%.gjf}_U*.out | wc -l) ] && tar -czf ${firstcurinfile%.gjf}.tgz ${firstcurinfile%.gjf}_U*.out && echo "OUT files archived to ${firstcurinfile%.gjf}.tgz."
+[ -n "${listchk[1]}" ] && tar -czf ${firstcurinfile%.gjf}_fchks.tgz ${listchk[@]} && rm ${listchk[@]} ${listchk[@]//fchk/chk}
+echo -e "========================\nAll utilities jobs done (if present). See you!\n========================"
+( $ramparam ) && killall monitram && echo "RAM monitoring stopped."
+killall sos_save
+( $nodalek ) && rm $HOME/antidalek.$(uname -n)
+
+# End and glory to God.
+
