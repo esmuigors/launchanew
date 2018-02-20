@@ -15,12 +15,15 @@ For launchanew to work properly, You only need to set multistep_job_name and job
 	::: a b c d e 1
 	
 Notice, however, that the first step of a geometry optimization is recognized by matching 'GeometryOptimization 1', but You can modify the script to match Your names. We actually advice You to use such a naming system -- it is really convenient to use for large batches of computations.
+
 Sometimes there is need for jobs that are not going to be archived (not like it is defined by Gaussian, as any job with IOps is NOT archived by default). For example, fragmented or other sophisticated guesses, or jobs froducing natural orbitals, etc. We are used to mark such jobs by setting their geometries to 0000_000 0000_000 (see description of -z keyword).
 
 *** an integer from 1 to 9 (can You imagine a job with 10 steps? I never had one.)
 
 3. You must add to Your ~/.bashrc or ~/.bash_profile the following:
+
 	 GAUSS_SPRSCRDIR=/path/to/additional/scratch/directory/other/than/one/set/in/GAUSS_SCRDIR/if/it/is/present
+	 
 	 GAUSS_LNCHDIR=/path/to/directory/containing/input/output/and/checkpoint/files
 	 export $GAUSS_SPRSCRDIR $GAUSS_LNCHDIR
 	 
@@ -39,21 +42,22 @@ If the name of input file is not specified, that of input file is used, replacin
 
 
 OPTIONS:
+
 Whether to delete scratch files in $GAUSS_SCRDIR directory or not to do that:
 
-   no option: do this after every misrun of Gaussian
+   * no option: do this after every misrun of Gaussian
    
-   -r or --remove:	do this once in the beginning
+   * -r or --remove:	do this once in the beginning
    
-   -a or --noalltimeneat:	SUPPRESS DOING SO after every misrun of Gaussian.
+   * -a or --noalltimeneat:	SUPPRESS DOING SO after every misrun of Gaussian.
    
 Behaviour regarding jobs using checkpoint files that were modified by failed jobs:
 
-   no option: all jobs until the end of compound job will be omitted. A compound job contains multiple steps which are neede to obtain complete results.
+  *  no option: all jobs until the end of compound job will be omitted. A compound job contains multiple steps which are neede to obtain complete results.
    
-   -c or  --ccheck:	job using chk from job just failed will be omitted
+  * -c or  --ccheck:	job using chk from job just failed will be omitted
    
-   -d or --nodscheck:	script will NOT remove even steps remaining in the failed multistep job that used the .CHK   
+  * -d or --nodscheck:	script will NOT remove even steps remaining in the failed multistep job that used the .CHK   
    
 -o or --useoldchk:	continue from the previous CHK file without foolproofing. By default, launchanew will abort if any of .chk files mentioned in the input are found in the present directory.
 
