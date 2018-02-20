@@ -11,7 +11,9 @@ USAGE REQUIREMENTS:
 ** we use automated extraction of job results and storing in database in the form of spreadsheet files; hence, job_group_name is the name of a sheet inside such a file (one file for each compound); multistep_job_name is the name of compound job -- it is useful to group Your jobs in the batch file; for instance, Ionization job (that is, by ΔSCF method) consists of three steps (neutral molecule, cation, anion), with multistep_job_name=Ionization and job_step_in_multistep_job=(1; 2; 3); ExcitedStateAbsorption will have the 1st step – single point with storing the 'slow' component of the reaction field and the 2nd step – the TD calculation itself.
 
 For launchanew to work properly, You only need to set multistep_job_name and job_step_in_multistep_job for each job title section -- why this is needed can be seen in description for options -c and -d. For example, You can use such title section:
+
 	::: a b c d e 1
+	
 Notice, however, that the first step of a geometry optimization is recognized by matching 'GeometryOptimization 1', but You can modify the script to match Your names. We actually advice You to use such a naming system -- it is really convenient to use for large batches of computations.
 Sometimes there is need for jobs that are not going to be archived (not like it is defined by Gaussian, as any job with IOps is NOT archived by default). For example, fragmented or other sophisticated guesses, or jobs froducing natural orbitals, etc. We are used to mark such jobs by setting their geometries to 0000_000 0000_000 (see description of -z keyword).
 
@@ -22,7 +24,7 @@ Sometimes there is need for jobs that are not going to be archived (not like it 
 	 GAUSS_LNCHDIR=/path/to/directory/containing/input/output/and/checkpoint/files
 	 export $GAUSS_SPRSCRDIR $GAUSS_LNCHDIR
 	 
-4 (optional). lutil commands marked as Gaussian comments (starting with !lutil in an input file). We use these for things like splitting large batch jobs so that output files are easier to be proceeded (!lutil echo 'Splitting..'), or producing formatted checkpoint files right during  the batch job (!lutil formchk chk_name.chk). As You can see, everything after the keyword !lutil is just executed as a bash command. When an !lutil line is encountered, the input file is split into two parts, named as /path/to/input/file_U1.gjf, /path/to/input/file_U2.gjf, and so on. If You don't use them, it is OK for the script to work properly.
+4. (optional) lutil commands marked as Gaussian comments (starting with !lutil in an input file). We use these for things like splitting large batch jobs so that output files are easier to be proceeded (!lutil echo 'Splitting..'), or producing formatted checkpoint files right during  the batch job (!lutil formchk chk_name.chk). As You can see, everything after the keyword !lutil is just executed as a bash command. When an !lutil line is encountered, the input file is split into two parts, named as /path/to/input/file_U1.gjf, /path/to/input/file_U2.gjf, and so on. If You don't use them, it is OK for the script to work properly.
 
 
 USAGE: 
